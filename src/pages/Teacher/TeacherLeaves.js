@@ -47,8 +47,14 @@ export default function TeacherLeaves() {
   );
 
   return (
-    <div className="p-4 md:p-10 max-w-7xl mx-auto space-y-10 text-slate-800 dark:text-slate-200 min-h-screen bg-slate-50 dark:bg-[#0B0F1A]">
-      <Toaster position="top-right" />
+    <div className="p-4 md:p-10 max-w-7xl mx-auto space-y-10 text-slate-800 dark:text-slate-200 min-h-screen bg-slate-50 dark:bg-[#0B0F1A] transition-colors duration-300">
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          className: "dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-medium rounded-xl",
+          duration: 4000,
+        }}
+      />
       
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
@@ -72,13 +78,13 @@ export default function TeacherLeaves() {
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Operational Context</label>
               <div className="relative group">
-                <FileText className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-500 core-transition" size={18} />
+                <FileText className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                 <textarea
                   placeholder="State the reason for leave dispatch..."
                   value={form.reason}
                   onChange={(e) => setForm({ ...form, reason: e.target.value })}
                   required rows="4"
-                  className="w-full bg-slate-50 dark:bg-slate-950 rounded-2xl pl-12 pr-4 py-4 border-2 border-transparent dark:border-slate-800 text-sm font-bold outline-none focus:border-indigo-600 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-700 resize-none shadow-inner"
+                  className="w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white rounded-2xl pl-12 pr-4 py-4 border-2 border-transparent dark:border-slate-800 text-sm font-bold outline-none focus:border-indigo-600 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 resize-none shadow-inner"
                 />
               </div>
             </div>
@@ -92,10 +98,11 @@ export default function TeacherLeaves() {
                   <div className="relative">
                     <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input
-                      type="date" value={form[field]}
+                      type="date" 
+                      value={form[field]}
                       onChange={(e) => setForm({ ...form, [field]: e.target.value })}
                       required
-                      className="w-full bg-slate-50 dark:bg-slate-950 rounded-2xl pl-12 pr-4 py-4 border-2 border-transparent dark:border-slate-800 text-xs font-black outline-none focus:border-indigo-600 transition-all shadow-inner"
+                      className="w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white rounded-2xl pl-12 pr-4 py-4 border-2 border-transparent dark:border-slate-800 text-xs font-black outline-none focus:border-indigo-600 transition-all shadow-inner dark:[color-scheme:dark]"
                     />
                   </div>
                 </div>

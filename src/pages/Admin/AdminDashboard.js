@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import API from "../../services/api";
 import toast, { Toaster } from "react-hot-toast";
 
-const emptyForm = { firstName: "", lastName: "", email: "", password: "", role: "student" };
+const emptyForm = { firstName: "", lastName: "", rollNumber: "", email: "", password: "", role: "student" };
 const emptySub = { name: "", code: "", teacherId: "", department: "", semester: "", credits: "", description: "" };
 
 export default function AdminDashboard() {
@@ -54,7 +54,7 @@ export default function AdminDashboard() {
       setEditId(null);
       fetchUsers();
     } catch (err) {
-      toast.error("Failed to save user. Please try again.", { id: loadToast });
+      toast.error(err.response?.data?.msg || err.response?.data?.error || "Failed to save user. Please try again.", { id: loadToast });
     }
   };
 
@@ -66,7 +66,14 @@ export default function AdminDashboard() {
         fetchUsers();
       } else if (type === "edit") {
         setEditId(payload._id);
-        setForm({ ...payload, password: "" });
+        setForm({
+          firstName: payload.firstName || "",
+          lastName: payload.lastName || "",
+          rollNumber: payload.rollNumber || "",
+          email: payload.email || "",
+          role: payload.role || "student",
+          password: "",
+        });
         toast("Editing mode enabled", { icon: "📝" });
       } else if (type === "assign") {
         await API.post("/subjects/assign", subForm);
@@ -79,7 +86,7 @@ export default function AdminDashboard() {
   };
 
   const filteredUsers = users.filter((u) =>
-    `${u.firstName || ""} ${u.lastName || ""} ${u.email || ""}`
+    `${u.firstName || ""} ${u.lastName || ""} ${u.email || ""} ${u.rollNumber || ""}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
   );
@@ -101,7 +108,7 @@ export default function AdminDashboard() {
           <FaSearch className="absolute left-3.5 top-3.5 text-slate-400 text-sm" />
           <input
             type="text"
-            placeholder="Search users..."
+            placeholder="Search users or roll numbers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl py-2.5 pl-10 pr-4 outline-none focus:ring-2 focus:ring-indigo-500 text-sm border border-transparent focus:border-indigo-500 transition"
@@ -165,7 +172,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Forms Grid (Responsive side-by-side on desktop, stacked on mobile) */}
+      {/* Forms Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Management Form */}
         <section className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 md:p-7 border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -201,11 +208,23 @@ export default function AdminDashboard() {
               name="role"
               value={form.role}
               onChange={handleInput(setForm)}
-              className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+              className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full text-slate-900 dark:text-white"
             >
-              <option value="student">Student</option>
-              <option value="teacher">Teacher</option>
+              <option value="student" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Student</option>
+              <option value="teacher" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Teacher</option>
             </select>
+
+            {/* Roll Number Input (Visible when role is student) */}
+            {form.role === "student" && (
+              <input
+                name="rollNumber"
+                placeholder="Roll Number (e.g., CS-101, 24)"
+                value={form.rollNumber}
+                onChange={handleInput(setForm)}
+                className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:col-span-2"
+              />
+            )}
+
             <input
               name="password"
               type="password"
@@ -237,7 +256,7 @@ export default function AdminDashboard() {
               value={subForm.name}
               onChange={handleInput(setSubForm)}
               required
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400"
+              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400 text-white"
             />
             <input
               name="code"
@@ -245,20 +264,20 @@ export default function AdminDashboard() {
               value={subForm.code}
               onChange={handleInput(setSubForm)}
               required
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400"
+              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-slate-400 text-white"
             />
             <select
               name="teacherId"
               value={subForm.teacherId}
               onChange={handleInput(setSubForm)}
               required
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white [&>option]:text-black"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white"
             >
-              <option value="">Select Teacher</option>
+              <option value="" className="bg-slate-900 text-slate-400">Select Teacher</option>
               {users
                 .filter((u) => u.role?.toLowerCase() === "teacher")
                 .map((t) => (
-                  <option key={t._id} value={t._id}>
+                  <option key={t._id} value={t._id} className="bg-slate-900 text-white">
                     {t.firstName} {t.lastName}
                   </option>
                 ))}
@@ -270,7 +289,7 @@ export default function AdminDashboard() {
         </section>
       </div>
 
-      {/* Users List Data Table (Auto horizontal scroll for small screens) */}
+      {/* Users List Data Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800">
           <h2 className="text-base sm:text-lg font-bold">Users List</h2>
@@ -281,6 +300,7 @@ export default function AdminDashboard() {
               <tr>
                 <th className="text-left p-3.5 sm:p-4">User</th>
                 <th className="text-left p-3.5 sm:p-4">Role</th>
+                <th className="text-left p-3.5 sm:p-4">Roll No</th>
                 <th className="text-right p-3.5 sm:p-4">Actions</th>
               </tr>
             </thead>
@@ -314,6 +334,9 @@ export default function AdminDashboard() {
                     >
                       {u.role}
                     </span>
+                  </td>
+                  <td className="p-3.5 sm:p-4 font-mono text-xs text-slate-600 dark:text-slate-300">
+                    {u.role?.toLowerCase() === "student" ? u.rollNumber || "N/A" : "—"}
                   </td>
                   <td className="p-3.5 sm:p-4 text-right space-x-1 sm:space-x-2">
                     <button

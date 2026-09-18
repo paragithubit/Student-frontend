@@ -6,11 +6,13 @@ import {
   FaChartLine, 
   FaBookOpen, 
   FaUniversity, 
-  FaLayerGroup 
+  FaLayerGroup,
+  FaCamera 
 } from "react-icons/fa";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import API from "../../services/api";
+import toast, { Toaster } from "react-hot-toast";
 
 const QUICK_ACTIONS = [
   { 
@@ -42,8 +44,58 @@ export default function StudentDashboard() {
     rollNumber: "",
   });
 
-  const studentName = localStorage.getItem("name") || "Student";
-  const profilePic = localStorage.getItem("profilePic");
+  const fileInputRef = useRef(null);
+  const [profilePic, setProfilePic] = useState("");
+
+  const storedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+
+  const studentName =
+    localStorage.getItem("name") ||
+    [storedUser.firstName, storedUser.lastName].filter(Boolean).join(" ") ||
+    "Student";
+
+  useEffect(() => {
+    const storedPic = localStorage.getItem("profilePic") || storedUser.profilePic || storedUser.avatar || storedUser.photo;
+    if (storedPic) {
+      setProfilePic(storedPic);
+    }
+  }, []);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image size must be less than 2MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setProfilePic(base64String);
+      localStorage.setItem("profilePic", base64String);
+
+      try {
+        const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+        userObj.profilePic = base64String;
+        localStorage.setItem("user", JSON.stringify(userObj));
+      } catch (err) {
+        console.error("Failed to update user object in storage", err);
+      }
+
+      toast.success("Profile photo updated successfully!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const finalProfilePic = profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&background=4F46E5&color=fff`;
 
   useEffect(() => {
     (async () => {
@@ -59,16 +111,29 @@ export default function StudentDashboard() {
           : 0;
 
         const latestGrade = res.data?.length ? res.data[res.data.length - 1].grade : "-";
-        const divInfo = profile.data?.division || {};
+        const userProfile = profile.data?.user || profile.data || {};
+        const divInfo = userProfile.division || {};
+
+        const roll =
+          userProfile.rollNumber ||
+          userProfile.rollNo ||
+          localStorage.getItem("rollNumber") ||
+          storedUser.rollNumber ||
+          "N/A";
 
         setDashboardData({
           attendance: percent,
           grade: latestGrade,
-          department: divInfo.department?.name || "N/A",
-          semester: divInfo.semester?.semesterNumber || "N/A",
-          division: divInfo.name || "N/A",
-          rollNumber: profile.data?.rollNumber || "N/A",
+          department: divInfo.department?.name || userProfile.department?.name || "N/A",
+          semester: divInfo.semester?.semesterNumber ? `Semester ${divInfo.semester.semesterNumber}` : userProfile.semester?.semesterNumber ? `Semester ${userProfile.semester.semesterNumber}` : "N/A",
+          division: divInfo.name || userProfile.division?.name || "N/A",
+          rollNumber: roll,
         });
+
+        if (userProfile.profilePic && !localStorage.getItem("profilePic")) {
+          setProfilePic(userProfile.profilePic);
+          localStorage.setItem("profilePic", userProfile.profilePic);
+        }
       } catch (err) {
         console.error("Failed to load student dashboard info", err);
       } finally {
@@ -86,7 +151,7 @@ export default function StudentDashboard() {
     },
     { 
       title: "Semester", 
-      value: `Semester ${dashboardData.semester}`, 
+      value: dashboardData.semester, 
       icon: <FaBookOpen />, 
       style: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" 
     },
@@ -100,11 +165,19 @@ export default function StudentDashboard() {
 
   return (
     <div className="w-full space-y-6 sm:space-y-8">
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          className: "dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-medium rounded-xl",
+          duration: 4000,
+        }}
+      />
+
       {/* Student Welcome & Profile Header */}
       <header className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-            Hello, <span className="text-blue-600 dark:text-blue-400">{studentName.split(" ")[0]}!</span> 👋
+            Hello, <span className="text-blue-600 dark:text-blue-400">{studentName.split(" ")[0]}!</span>
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Here is your academic overview and status.
@@ -118,15 +191,29 @@ export default function StudentDashboard() {
               Roll No: {dashboardData.rollNumber}
             </p>
           </div>
-          {profilePic ? (
+
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImageChange} 
+            accept="image/*" 
+            className="hidden" 
+          />
+
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="relative group cursor-pointer shrink-0"
+            title="Click to choose a photo from your device"
+          >
             <img 
-              src={profilePic} 
-              className="w-10 h-10 rounded-xl border-2 border-blue-500 object-cover shrink-0" 
+              src={finalProfilePic} 
+              className="w-11 h-11 rounded-xl border-2 border-blue-500 object-cover shadow-xs group-hover:opacity-85 transition-opacity" 
               alt="profile" 
             />
-          ) : (
-            <FaUserCircle size={36} className="text-slate-300 dark:text-slate-600 shrink-0" />
-          )}
+            <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <FaCamera size={14} className="text-white" />
+            </div>
+          </div>
         </div>
       </header>
 

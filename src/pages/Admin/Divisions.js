@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import API from "../../services/api";
-import {
+import { 
   Network, Layers, PlusCircle, Trash2, Edit2, Loader2, AlertCircle,
   FolderPlus, Users, UserCheck, GraduationCap, CalendarDays, ChevronDown
 } from "lucide-react";
@@ -133,7 +133,7 @@ function Divisions() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Division Name</label>
               <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4">
                 <Layers size={16} className="text-slate-400 mr-2.5" />
-                <input type="text" placeholder="e.g. Division A" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-transparent py-3 outline-none" />
+                <input type="text" placeholder="e.g. Division A" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-transparent py-3 outline-none text-slate-900 dark:text-white" />
               </div>
             </div>
 
@@ -141,9 +141,17 @@ function Divisions() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Department</label>
               <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4">
                 <GraduationCap size={16} className="text-slate-400 mr-2.5" />
-                <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} className="w-full bg-transparent py-3 outline-none">
-                  <option value="">Select Department</option>
-                  {data.departments.map(dept => <option key={dept._id} value={dept._id}>{dept.name}</option>)}
+                <select 
+                  value={form.department} 
+                  onChange={e => setForm({ ...form, department: e.target.value })} 
+                  className="w-full bg-transparent py-3 outline-none text-slate-900 dark:text-white"
+                >
+                  <option value="" className="bg-white dark:bg-slate-900 text-slate-400">Select Department</option>
+                  {data.departments.map(dept => (
+                    <option key={dept._id} value={dept._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      {dept.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -152,9 +160,17 @@ function Divisions() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Semester</label>
               <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4">
                 <CalendarDays size={16} className="text-slate-400 mr-2.5" />
-                <select value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })} className="w-full bg-transparent py-3 outline-none">
-                  <option value="">Select Semester</option>
-                  {data.semesters.map(sem => <option key={sem._id} value={sem._id}>Semester {sem.semesterNumber}</option>)}
+                <select 
+                  value={form.semester} 
+                  onChange={e => setForm({ ...form, semester: e.target.value })} 
+                  className="w-full bg-transparent py-3 outline-none text-slate-900 dark:text-white"
+                >
+                  <option value="" className="bg-white dark:bg-slate-900 text-slate-400">Select Semester</option>
+                  {data.semesters.map(sem => (
+                    <option key={sem._id} value={sem._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      Semester {sem.semesterNumber}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -162,12 +178,12 @@ function Divisions() {
             {/* STUDENTS DROPDOWN */}
             <div className="space-y-2 relative" ref={refs.students}>
               <label className="flex items-center gap-2 font-semibold text-sm"><Users size={16} /> Students</label>
-              <button type="button" onClick={() => setDropdown(prev => ({ ...prev, students: !prev.students }))} className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900 text-left flex items-center justify-between">
+              <button type="button" onClick={() => setDropdown(prev => ({ ...prev, students: !prev.students }))} className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900 text-left flex items-center justify-between text-slate-900 dark:text-white">
                 <span className="truncate">{selected.students.length > 0 ? `${selected.students.length} Students Selected` : "Select Students"}</span>
                 <ChevronDown size={18} />
               </button>
               {dropdown.students && (
-                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-64 overflow-y-auto text-slate-900 dark:text-white">
                   {renderDropdownItems("students")}
                 </div>
               )}
@@ -182,12 +198,12 @@ function Divisions() {
             {/* TEACHERS DROPDOWN */}
             <div className="space-y-2 relative" ref={refs.teachers}>
               <label className="flex items-center gap-2 font-semibold text-sm"><UserCheck size={16} /> Teachers</label>
-              <button type="button" onClick={() => setDropdown(prev => ({ ...prev, teachers: !prev.teachers }))} className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900 text-left flex items-center justify-between">
+              <button type="button" onClick={() => setDropdown(prev => ({ ...prev, teachers: !prev.teachers }))} className="w-full border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-white dark:bg-slate-900 text-left flex items-center justify-between text-slate-900 dark:text-white">
                 <span className="truncate">{selected.teachers.length > 0 ? `${selected.teachers.length} Teachers Selected` : "Select Teachers"}</span>
                 <ChevronDown size={18} />
               </button>
               {dropdown.teachers && (
-                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-64 overflow-y-auto text-slate-900 dark:text-white">
                   {renderDropdownItems("teachers")}
                 </div>
               )}

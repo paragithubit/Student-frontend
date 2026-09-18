@@ -6,10 +6,12 @@ import {
   FaUsers,
   FaClipboardList,
   FaChalkboardTeacher,
+  FaCamera,
 } from "react-icons/fa";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import API from "../../services/api";
+import toast, { Toaster } from "react-hot-toast";
 
 const QUICK_ACTIONS = [
   {
@@ -35,7 +37,48 @@ export default function TeacherDashboard() {
   const [dashboardData, setDashboardData] = useState({ students: [], subjects: [] });
 
   const teacherName = localStorage.getItem("name") || "Teacher";
-  const profilePic = localStorage.getItem("profilePic");
+  
+  // Profile picture states
+  const [profilePic, setProfilePic] = useState("");
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const storedPic = localStorage.getItem("profilePic");
+    if (storedPic) {
+      setProfilePic(storedPic);
+    } else {
+      try {
+        const userObj = JSON.parse(localStorage.getItem("user"));
+        if (userObj?.profilePic || userObj?.avatar || userObj?.photo) {
+          setProfilePic(userObj.profilePic || userObj.avatar || userObj.photo);
+        }
+      } catch (e) {
+        // Fallback if JSON parse fails
+      }
+    }
+  }, []);
+
+  // Handle local device image selection (like WhatsApp status/profile picture picker)
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("Image size should be less than 2MB");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result;
+        setProfilePic(base64String);
+        localStorage.setItem("profilePic", base64String);
+        toast.success("Profile picture updated successfully!");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Fallback to dynamic avatar if no profile picture is found
+  const finalProfilePic = profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacherName)}&background=4F46E5&color=fff`;
 
   useEffect(() => {
     (async () => {
@@ -79,11 +122,19 @@ export default function TeacherDashboard() {
 
   return (
     <div className="w-full space-y-6 sm:space-y-8">
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          className: "dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-medium rounded-xl",
+          duration: 4000,
+        }}
+      />
+
       {/* Teacher Profile & Welcome Header */}
       <header className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-            Welcome, <span className="text-blue-600 dark:text-blue-400">{teacherName.split(" ")[0]}</span> 👋
+            Welcome, <span className="text-blue-600 dark:text-blue-400">{teacherName.split(" ")[0]}</span>
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Manage attendance, results, and assigned courses.
@@ -97,15 +148,31 @@ export default function TeacherDashboard() {
               Teacher Panel
             </p>
           </div>
-          {profilePic ? (
+
+          {/* Hidden File Input for Device Image Selection */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImageChange} 
+            accept="image/*" 
+            className="hidden" 
+          />
+
+          {/* Clickable Profile Picture Container with Camera Overlay */}
+          <div 
+            onClick={() => fileInputRef.current.click()}
+            className="relative group cursor-pointer shrink-0"
+            title="Click to change profile picture from your device"
+          >
             <img
-              src={profilePic}
-              className="w-10 h-10 rounded-xl border-2 border-blue-500 object-cover shrink-0"
+              src={finalProfilePic}
+              className="w-11 h-11 rounded-xl border-2 border-blue-500 object-cover shadow-xs group-hover:opacity-90 transition-opacity"
               alt="profile"
             />
-          ) : (
-            <FaUserCircle size={36} className="text-slate-300 dark:text-slate-600 shrink-0" />
-          )}
+            <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <FaCamera size={14} className="text-white" />
+            </div>
+          </div>
         </div>
       </header>
 

@@ -1,42 +1,85 @@
 import { useEffect, useState } from "react";
 import API from "../../services/api";
-import { MdOutlineAutoStories, MdPersonSearch, MdRefresh, MdEdit, MdDelete } from "react-icons/md";
+import { MdOutlineAutoStories, MdPersonSearch, MdRefresh, MdEdit, MdDelete, MdClose, MdWarning } from "react-icons/md";
+import toast, { Toaster } from "react-hot-toast";
 
 function Subjects() {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Edit Modal States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [currentSubject, setCurrentSubject] = useState(null);
+  const [formData, setFormData] = useState({ name: "", code: "" });
+
+  // Delete Confirmation State (Replaces window.confirm)
+  const [deleteId, setDeleteId] = useState(null);
+
   const fetchSubjects = async () => {
     setLoading(true);
-    try { setSubjects((await API.get("/subjects")).data || []); } 
-    catch (err) { console.error("Error fetching subjects:", err); } 
-    finally { setLoading(false); }
+    try { 
+      const res = await API.get("/subjects");
+      setSubjects(res.data || []); 
+    } 
+    catch (err) { 
+      console.error("Error fetching subjects:", err); 
+      toast.error("Failed to sync subjects data");
+    } 
+    finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => { fetchSubjects(); }, []);
 
-  // Handle Delete Subject
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this subject?")) {
-      try {
-        await API.delete(`/subjects/${id}`);
-        setSubjects(subjects.filter((s) => s._id !== id));
-      } catch (err) {
-        console.error("Error deleting subject:", err);
-        alert(err.response?.data?.message || "Failed to delete subject");
-      }
+  // Handle Delete Confirmation Execution
+  const executeDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await API.delete(`/subjects/${deleteId}`);
+      setSubjects(subjects.filter((s) => s._id !== deleteId));
+      toast.success("Subject deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting subject:", err);
+      toast.error(err.response?.data?.message || "Failed to delete subject");
+    } finally {
+      setDeleteId(null);
     }
   };
 
-  // Handle Edit Subject (Connect to your Edit Modal/Form logic here)
-  const handleEdit = (subject) => {
-    console.log("Edit subject clicked:", subject);
-    // Example: openEditModal(subject);
+  // Open Edit Modal and pre-fill data
+  const handleEditClick = (subject) => {
+    setCurrentSubject(subject);
+    setFormData({
+      name: subject.name || "",
+      code: subject.code || ""
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Submit Updated Subject to Backend
+  const handleUpdateSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await API.put(`/subjects/${currentSubject._id}`, formData);
+      
+      // Update local state instantly so UI refreshes smoothly
+      setSubjects(subjects.map(s => s._id === currentSubject._id ? response.data.subject : s));
+      
+      setIsEditModalOpen(false);
+      toast.success("Subject updated successfully!");
+    } catch (err) {
+      console.error("Error updating subject:", err);
+      toast.error(err.response?.data?.message || "Failed to update subject");
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F1A] p-4 md:p-8 transition-colors text-black dark:text-white">
       
+      {/* Toast Notification Container */}
+      <Toaster position="top-right" reverseOrder={false} />
+
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
@@ -99,18 +142,18 @@ function Subjects() {
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 italic">{s.teacher?.email || "—"}</td>
                       
-                      {/* ACTIONS COLUMN (RIGHT SIDE OF EMAIL) */}
+                      {/* ACTIONS COLUMN */}
                       <td className="px-6 py-4 text-sm">
                         <div className="flex items-center gap-2">
                           <button 
-                            onClick={() => handleEdit(s)}
+                            onClick={() => handleEditClick(s)}
                             className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
                             title="Edit Subject"
                           >
                             <MdEdit size={16} />
                           </button>
                           <button 
-                            onClick={() => handleDelete(s._id)}
+                            onClick={() => setDeleteId(s._id)}
                             className="p-2 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
                             title="Delete Subject"
                           >
@@ -127,6 +170,87 @@ function Subjects() {
           </div>
         )}
       </div>
+
+      {/* EDIT MODAL POPUP */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">Edit Subject</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                <MdClose size={22} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Subject Name</label>
+                <input 
+                  type="text" 
+                  value={formData.name} 
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-black dark:text-white focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Course Code</label>
+                <input 
+                  type="text" 
+                  value={formData.code} 
+                  onChange={(e) => setFormData({...formData, code: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-black dark:text-white focus:outline-none focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL (Replaces window.confirm) */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-800 shadow-xl text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <MdWarning size={24} />
+            </div>
+            <h3 className="text-lg font-bold mb-1">Are you sure?</h3>
+            <p className="text-slate-500 text-sm mb-6">Do you really want to delete this subject? This action cannot be undone.</p>
+            <div className="flex justify-center gap-3">
+              <button 
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-800 w-1/2"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 transition-all shadow-sm w-1/2"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER STATUS */}
       <div className="mt-4 flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-widest px-2">
