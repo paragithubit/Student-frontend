@@ -6,7 +6,8 @@ import {
   FaPlus, 
   FaEdit, 
   FaTrashAlt, 
-  FaSearch 
+  FaSearch,
+  FaTimes
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import API from "../../services/api";
@@ -46,13 +47,44 @@ export default function AdminDashboard() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const loadToast = toast.loading(editId ? "Updating user..." : "Adding user...");
+
     try {
-      if (editId) await API.put(`/users/${editId}`, form);
-      else await API.post("/users/add", form);
+      const roleStr = form.role.toLowerCase();
+      const cleanRoll = form.rollNumber ? String(form.rollNumber).trim() : "N/A";
+
+      const payload = {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        role: roleStr,
+        rollNumber: roleStr === "student" ? cleanRoll : "N/A",
+        studentId: roleStr === "student" ? cleanRoll : "N/A",
+      };
+
+      if (!editId) {
+        payload.password = form.password;
+        await API.post("/users/add", payload);
+      } else {
+        if (form.password && form.password.trim() !== "") {
+          payload.password = form.password.trim();
+        }
+        // Main update
+        await API.put(`/users/${editId}`, payload);
+
+        // Targeted direct roll update if student
+        if (roleStr === "student") {
+          try {
+            await API.put(`/users/set-roll/${editId}`, { rollNumber: cleanRoll });
+          } catch (err) {
+            console.warn("Direct roll update fallback hit:", err);
+          }
+        }
+      }
+
       toast.success(`User ${editId ? "updated" : "added"} successfully!`, { id: loadToast });
       setForm(emptyForm);
       setEditId(null);
-      fetchUsers();
+      await fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.msg || err.response?.data?.error || "Failed to save user. Please try again.", { id: loadToast });
     }
@@ -66,15 +98,17 @@ export default function AdminDashboard() {
         fetchUsers();
       } else if (type === "edit") {
         setEditId(payload._id);
+        const resolvedRole = (payload.role || "student").toLowerCase();
         setForm({
           firstName: payload.firstName || "",
           lastName: payload.lastName || "",
-          rollNumber: payload.rollNumber || "",
+          rollNumber: payload.rollNumber && payload.rollNumber !== "N/A" ? payload.rollNumber : "",
           email: payload.email || "",
-          role: payload.role || "student",
+          role: resolvedRole,
           password: "",
         });
-        toast("Editing mode enabled", { icon: "📝" });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        toast("Editing user - Enter roll number above", { icon: "📝" });
       } else if (type === "assign") {
         await API.post("/subjects/assign", subForm);
         toast.success("Subject Assigned Successfully");
@@ -82,6 +116,49 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       toast.error("Operation failed. Check connection.");
+    }
+  };
+
+  // Dedicated single-click roll update
+  const handleDirectRollSet = async (user) => {
+    const currentRoll = user.rollNumber && user.rollNumber !== "N/A" ? user.rollNumber : "";
+    const newRoll = window.prompt(`Enter Roll Number for ${user.firstName} ${user.lastName}:`, currentRoll);
+
+    if (newRoll !== null && newRoll.trim() !== "") {
+      const loadToast = toast.loading("Setting roll number...");
+      const finalRoll = newRoll.trim();
+
+      try {
+        // Try dedicated route first
+        let updated = false;
+        try {
+          await API.put(`/users/set-roll/${user._id}`, { rollNumber: finalRoll });
+          updated = true;
+        } catch (e) {
+          console.warn("set-roll route not active, falling back to standard PUT");
+        }
+
+        if (!updated) {
+          await API.put(`/users/${user._id}`, {
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: "student",
+            rollNumber: finalRoll,
+            studentId: finalRoll,
+          });
+        }
+
+        // Optimistically update local state for immediate feedback
+        setUsers((prev) =>
+          prev.map((u) => (u._id === user._id ? { ...u, rollNumber: finalRoll } : u))
+        );
+
+        toast.success(`Roll Number set to ${finalRoll}`, { id: loadToast });
+        fetchUsers();
+      } catch (err) {
+        toast.error("Failed to update Roll Number", { id: loadToast });
+      }
     }
   };
 
@@ -176,9 +253,24 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Management Form */}
         <section className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 md:p-7 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <h2 className="text-lg sm:text-xl font-bold mb-5">
-            {editId ? "Update User" : "Add New User"}
-          </h2>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg sm:text-xl font-bold">
+              {editId ? "Update User" : "Add New User"}
+            </h2>
+            {editId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditId(null);
+                  setForm(emptyForm);
+                }}
+                className="text-xs font-bold text-slate-500 hover:text-red-500 flex items-center gap-1.5 transition"
+              >
+                <FaTimes /> Cancel Edit
+              </button>
+            )}
+          </div>
+
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <input
               name="firstName"
@@ -214,21 +306,22 @@ export default function AdminDashboard() {
               <option value="teacher" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Teacher</option>
             </select>
 
-            {/* Roll Number Input (Visible when role is student) */}
-            {form.role === "student" && (
+            {/* Roll Number Input (Type text to allow alphanumeric formats) */}
+            {form.role.toLowerCase() === "student" && (
               <input
                 name="rollNumber"
+                type="text"
                 placeholder="Roll Number (e.g., CS-101, 24)"
                 value={form.rollNumber}
                 onChange={handleInput(setForm)}
-                className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:col-span-2"
+                className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:col-span-2 font-medium"
               />
             )}
 
             <input
               name="password"
               type="password"
-              placeholder="Password"
+              placeholder={editId ? "Leave blank to keep current password" : "Password"}
               value={form.password}
               onChange={handleInput(setForm)}
               required={!editId}
@@ -336,7 +429,20 @@ export default function AdminDashboard() {
                     </span>
                   </td>
                   <td className="p-3.5 sm:p-4 font-mono text-xs text-slate-600 dark:text-slate-300">
-                    {u.role?.toLowerCase() === "student" ? u.rollNumber || "N/A" : "—"}
+                    {u.role?.toLowerCase() === "student" ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{u.rollNumber || "N/A"}</span>
+                        <button
+                          onClick={() => handleDirectRollSet(u)}
+                          className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md transition"
+                          title="Quick edit roll number"
+                        >
+                          Set
+                        </button>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="p-3.5 sm:p-4 text-right space-x-1 sm:space-x-2">
                     <button
