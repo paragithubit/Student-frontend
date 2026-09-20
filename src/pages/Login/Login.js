@@ -43,16 +43,36 @@ function Login() {
     try {
       setLoading(true);
       const { data } = await API.post("/auth/login", form);
-      
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("role", data.role);
-      localStorage.setItem("name", data.name);
-      localStorage.setItem("profilePic", data.profilePic);
+
+      // Determine proper user object structure from response
+      const resolvedUser = data.user || {
+        firstName: data.firstName || (data.name ? data.name.split(" ")[0] : ""),
+        lastName: data.lastName || (data.name ? data.name.split(" ").slice(1).join(" ") : ""),
+        name: data.name || `${data.firstName || ""} ${data.lastName || ""}`.trim(),
+        role: data.role,
+        email: data.email || form.email,
+        rollNumber: data.rollNumber || "N/A"
+      };
+
+      // Store in sessionStorage to ensure tab isolation
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("role", data.role);
+      sessionStorage.setItem("name", resolvedUser.name || data.name || "");
+      sessionStorage.setItem("user", JSON.stringify(resolvedUser));
+
+      if (data.profilePic) {
+        sessionStorage.setItem("profilePic", data.profilePic);
+      }
 
       setStatus({ type: "success", msg: "Login successful! Redirecting..." });
-      setTimeout(() => { window.location.href = `/${data.role}`; }, 1000);
+      setTimeout(() => { 
+        window.location.href = `/${data.role}`; 
+      }, 800);
     } catch (err) {
-      setStatus({ type: "error", msg: err.response?.data?.message || "Invalid credentials." });
+      setStatus({ 
+        type: "error", 
+        msg: err.response?.data?.message || err.response?.data?.msg || "Invalid credentials." 
+      });
     } finally {
       setLoading(false);
     }
@@ -73,7 +93,7 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-white dark:bg-slate-900 transition-colors">
       {/* LEFT SIDE ARTWORK */}
       <div className="hidden lg:flex lg:w-3/5 bg-slate-900 justify-center items-center relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent z-10" />
@@ -92,11 +112,11 @@ function Login() {
       </div>
 
       {/* RIGHT SIDE WORKSPACE */}
-      <div className="w-full lg:w-2/5 flex flex-col justify-center px-8 sm:px-16 lg:px-20 bg-slate-50">
+      <div className="w-full lg:w-2/5 flex flex-col justify-center px-8 sm:px-16 lg:px-20 bg-slate-50 dark:bg-slate-950 transition-colors">
         <div className="max-w-md w-full mx-auto">
           <div className="mb-10">
-            <h2 className="text-3xl font-black text-slate-800">Sign In</h2>
-            <p className="text-slate-500 mt-2 font-medium">Portal Access Authorization</p>
+            <h2 className="text-3xl font-black text-slate-800 dark:text-white">Sign In</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Portal Access Authorization</p>
           </div>
 
           {/* DYNAMIC ALERT BANNER */}
@@ -107,7 +127,9 @@ function Login() {
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 className={`p-4 rounded-xl mb-6 text-sm font-bold flex items-center gap-2 ${
-                  status.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                  status.type === "success" 
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" 
+                    : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                 }`}
               >
                 {status.msg}
@@ -147,7 +169,7 @@ function Login() {
 
             <button
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-70 flex justify-center items-center"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:scale-95 disabled:opacity-70 flex justify-center items-center"
             >
               {loading ? <Loader2 className="animate-spin" size={18} /> : "Login"}
             </button>

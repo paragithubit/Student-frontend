@@ -36,57 +36,111 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState({ students: [], subjects: [] });
 
-  const teacherName = localStorage.getItem("name") || "Teacher";
-  
   // Profile picture states
   const [profilePic, setProfilePic] = useState("");
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    const storedPic = localStorage.getItem("profilePic");
-    if (storedPic) {
-      setProfilePic(storedPic);
-    } else {
-      try {
-        const userObj = JSON.parse(localStorage.getItem("user"));
-        if (userObj?.profilePic || userObj?.avatar || userObj?.photo) {
-          setProfilePic(userObj.profilePic || userObj.avatar || userObj.photo);
-        }
-      } catch (e) {
-        // Fallback if JSON parse fails
-      }
-    }
-  }, []);
-
-  // Handle local device image selection (like WhatsApp status/profile picture picker)
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error("Image size should be less than 2MB");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        setProfilePic(base64String);
-        localStorage.setItem("profilePic", base64String);
-        toast.success("Profile picture updated successfully!");
-      };
-      reader.readAsDataURL(file);
+  // Retrieve user with sessionStorage priority for multi-tab isolation
+  const getInitialUser = () => {
+    try {
+      const raw = sessionStorage.getItem("user") || localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
     }
   };
 
+  const [currentUser, setCurrentUser] = useState(getInitialUser);
+
+  // Compute teacher display names
+  const teacherName = (() => {
+    const sessionName = sessionStorage.getItem("name") || localStorage.getItem("name");
+    if (sessionName && sessionName !== "Teacher") return sessionName;
+
+    const combined = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ");
+    if (combined) return combined;
+
+    return currentUser?.name || "Teacher";
+  })();
+
+  const teacherFirstName = currentUser?.firstName || teacherName.split(" ")[0] || "Teacher";
+
+  useEffect(() => {
+    const storedPic = 
+      sessionStorage.getItem("profilePic") || 
+      localStorage.getItem("profilePic") || 
+      currentUser?.profilePic || 
+      currentUser?.avatar || 
+      currentUser?.photo;
+
+    if (storedPic) {
+      setProfilePic(storedPic);
+    }
+  }, [currentUser]);
+
+  // Handle local device image selection (like WhatsApp profile picture picker)
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image size should be less than 2MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setProfilePic(base64String);
+
+      sessionStorage.setItem("profilePic", base64String);
+      localStorage.setItem("profilePic", base64String);
+
+      try {
+        const updated = { ...currentUser, profilePic: base64String };
+        setCurrentUser(updated);
+        sessionStorage.setItem("user", JSON.stringify(updated));
+        localStorage.setItem("user", JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to update user object in storage", err);
+      }
+
+      toast.success("Profile picture updated successfully!");
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Fallback to dynamic avatar if no profile picture is found
-  const finalProfilePic = profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacherName)}&background=4F46E5&color=fff`;
+  const finalProfilePic =
+    profilePic ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(teacherName)}&background=4F46E5&color=fff`;
 
   useEffect(() => {
     (async () => {
       try {
-        const [stu, sub] = await Promise.all([
+        const [stu, sub, profile] = await Promise.all([
           API.get("/users/students"),
           API.get("/subjects/my"),
+          API.get("/auth/me").catch(() => null), // Gracefully fetch auth profile
         ]);
+
+        if (profile?.data) {
+          const userProfile = profile.data.user || profile.data;
+          if (userProfile.firstName || userProfile.name) {
+            const freshName =
+              userProfile.name ||
+              `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim();
+            setCurrentUser(userProfile);
+            sessionStorage.setItem("user", JSON.stringify(userProfile));
+            sessionStorage.setItem("name", freshName);
+          }
+          if (userProfile.profilePic && !profilePic) {
+            setProfilePic(userProfile.profilePic);
+            sessionStorage.setItem("profilePic", userProfile.profilePic);
+            localStorage.setItem("profilePic", userProfile.profilePic);
+          }
+        }
+
         setDashboardData({
           students: Array.isArray(stu.data) ? stu.data : [],
           subjects: Array.isArray(sub.data) ? sub.data : [],
@@ -134,7 +188,7 @@ export default function TeacherDashboard() {
       <header className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-            Welcome, <span className="text-blue-600 dark:text-blue-400">{teacherName.split(" ")[0]}</span>
+            Welcome, <span className="text-blue-600 dark:text-blue-400">{teacherFirstName}</span>
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Manage attendance, results, and assigned courses.
@@ -160,7 +214,7 @@ export default function TeacherDashboard() {
 
           {/* Clickable Profile Picture Container with Camera Overlay */}
           <div 
-            onClick={() => fileInputRef.current.click()}
+            onClick={() => fileInputRef.current?.click()}
             className="relative group cursor-pointer shrink-0"
             title="Click to change profile picture from your device"
           >

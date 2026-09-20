@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   FaUsers, 
   FaUserGraduate, 
@@ -7,7 +7,8 @@ import {
   FaEdit, 
   FaTrashAlt, 
   FaSearch,
-  FaTimes
+  FaTimes,
+  FaCamera
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import API from "../../services/api";
@@ -23,6 +24,31 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [subForm, setSubForm] = useState(emptySub);
+
+  // Avatar file upload reference and state
+  const fileInputRef = useRef(null);
+  const [adminAvatar, setAdminAvatar] = useState(
+    () => localStorage.getItem("admin_avatar") || ""
+  );
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select a valid image file");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result;
+        setAdminAvatar(base64);
+        localStorage.setItem("admin_avatar", base64);
+        toast.success("Profile picture updated! 📸");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -68,10 +94,8 @@ export default function AdminDashboard() {
         if (form.password && form.password.trim() !== "") {
           payload.password = form.password.trim();
         }
-        // Main update
         await API.put(`/users/${editId}`, payload);
 
-        // Targeted direct roll update if student
         if (roleStr === "student") {
           try {
             await API.put(`/users/set-roll/${editId}`, { rollNumber: cleanRoll });
@@ -119,49 +143,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Dedicated single-click roll update
-  const handleDirectRollSet = async (user) => {
-    const currentRoll = user.rollNumber && user.rollNumber !== "N/A" ? user.rollNumber : "";
-    const newRoll = window.prompt(`Enter Roll Number for ${user.firstName} ${user.lastName}:`, currentRoll);
-
-    if (newRoll !== null && newRoll.trim() !== "") {
-      const loadToast = toast.loading("Setting roll number...");
-      const finalRoll = newRoll.trim();
-
-      try {
-        // Try dedicated route first
-        let updated = false;
-        try {
-          await API.put(`/users/set-roll/${user._id}`, { rollNumber: finalRoll });
-          updated = true;
-        } catch (e) {
-          console.warn("set-roll route not active, falling back to standard PUT");
-        }
-
-        if (!updated) {
-          await API.put(`/users/${user._id}`, {
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            role: "student",
-            rollNumber: finalRoll,
-            studentId: finalRoll,
-          });
-        }
-
-        // Optimistically update local state for immediate feedback
-        setUsers((prev) =>
-          prev.map((u) => (u._id === user._id ? { ...u, rollNumber: finalRoll } : u))
-        );
-
-        toast.success(`Roll Number set to ${finalRoll}`, { id: loadToast });
-        fetchUsers();
-      } catch (err) {
-        toast.error("Failed to update Roll Number", { id: loadToast });
-      }
-    }
-  };
-
   const filteredUsers = users.filter((u) =>
     `${u.firstName || ""} ${u.lastName || ""} ${u.email || ""} ${u.rollNumber || ""}`
       .toLowerCase()
@@ -191,16 +172,46 @@ export default function AdminDashboard() {
             className="w-full bg-slate-100 dark:bg-slate-800 rounded-xl py-2.5 pl-10 pr-4 outline-none focus:ring-2 focus:ring-indigo-500 text-sm border border-transparent focus:border-indigo-500 transition"
           />
         </div>
+        
+        {/* Profile Card with WhatsApp-Style Local File Upload */}
         <div className="flex items-center justify-between sm:justify-end gap-3.5">
           <div className="text-left sm:text-right">
             <p className="text-sm font-bold leading-tight">Admin User</p>
             <p className="text-xs text-slate-500">Super Admin</p>
           </div>
-          <img
-            src="https://ui-avatars.com/api/?name=Admin&background=4F46E5&color=fff"
-            alt="profile"
-            className="h-10 w-10 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs shrink-0"
+
+          {/* Hidden File Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleAvatarUpload}
+            accept="image/*"
+            className="hidden"
           />
+
+          {/* Clickable Avatar Box */}
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="relative group cursor-pointer h-10 w-10 rounded-xl overflow-hidden shadow-xs border border-indigo-200 dark:border-slate-700 bg-indigo-600 flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
+            title="Click to choose profile picture from device"
+          >
+            {adminAvatar ? (
+              <img
+                src={adminAvatar}
+                alt="Admin Avatar"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-white font-black text-sm tracking-wider select-none">
+                AD
+              </span>
+            )}
+
+            {/* Hover Camera Icon Overlay */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+              <FaCamera size={13} />
+            </div>
+          </div>
         </div>
       </header>
 
@@ -430,16 +441,7 @@ export default function AdminDashboard() {
                   </td>
                   <td className="p-3.5 sm:p-4 font-mono text-xs text-slate-600 dark:text-slate-300">
                     {u.role?.toLowerCase() === "student" ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{u.rollNumber || "N/A"}</span>
-                        <button
-                          onClick={() => handleDirectRollSet(u)}
-                          className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md transition"
-                          title="Quick edit roll number"
-                        >
-                          Set
-                        </button>
-                      </div>
+                      <span className="font-semibold">{u.rollNumber || "N/A"}</span>
                     ) : (
                       "—"
                     )}

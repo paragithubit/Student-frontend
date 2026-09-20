@@ -84,8 +84,8 @@ const ProtectedElement = ({ isAuth, currentRole, targetRole, children }) => {
 // CORE APP ROUTER CONFIGURATION
 // ==========================================
 function App() {
-  const token = localStorage.getItem("token");
-  const role = localStorage.getItem("role");
+  const token =sessionStorage.getItem("token") ||  localStorage.getItem("token");
+  const role =sessionStorage.getItem("role")|| localStorage.getItem("role");
   const isAuth = !!(token && role);
 
   useEffect(() => {

@@ -47,25 +47,43 @@ export default function StudentDashboard() {
   const fileInputRef = useRef(null);
   const [profilePic, setProfilePic] = useState("");
 
-  const storedUser = (() => {
+  // Retrieve user with sessionStorage priority for multi-tab isolation
+  const getInitialUser = () => {
     try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
+      const raw = sessionStorage.getItem("user") || localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
     }
+  };
+
+  const [currentUser, setCurrentUser] = useState(getInitialUser);
+
+  // Compute student name dynamically
+  const studentName = (() => {
+    const sessionName = sessionStorage.getItem("name") || localStorage.getItem("name");
+    if (sessionName && sessionName !== "Student") return sessionName;
+
+    const combined = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ");
+    if (combined) return combined;
+
+    return currentUser?.name || "Student";
   })();
 
-  const studentName =
-    localStorage.getItem("name") ||
-    [storedUser.firstName, storedUser.lastName].filter(Boolean).join(" ") ||
-    "Student";
+  const studentFirstName = currentUser?.firstName || studentName.split(" ")[0] || "Student";
 
   useEffect(() => {
-    const storedPic = localStorage.getItem("profilePic") || storedUser.profilePic || storedUser.avatar || storedUser.photo;
+    const storedPic = 
+      sessionStorage.getItem("profilePic") || 
+      localStorage.getItem("profilePic") || 
+      currentUser?.profilePic || 
+      currentUser?.avatar || 
+      currentUser?.photo;
+
     if (storedPic) {
       setProfilePic(storedPic);
     }
-  }, []);
+  }, [currentUser]);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -80,12 +98,15 @@ export default function StudentDashboard() {
     reader.onloadend = () => {
       const base64String = reader.result;
       setProfilePic(base64String);
+
+      sessionStorage.setItem("profilePic", base64String);
       localStorage.setItem("profilePic", base64String);
 
       try {
-        const userObj = JSON.parse(localStorage.getItem("user") || "{}");
-        userObj.profilePic = base64String;
-        localStorage.setItem("user", JSON.stringify(userObj));
+        const updated = { ...currentUser, profilePic: base64String };
+        setCurrentUser(updated);
+        sessionStorage.setItem("user", JSON.stringify(updated));
+        localStorage.setItem("user", JSON.stringify(updated));
       } catch (err) {
         console.error("Failed to update user object in storage", err);
       }
@@ -95,7 +116,9 @@ export default function StudentDashboard() {
     reader.readAsDataURL(file);
   };
 
-  const finalProfilePic = profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&background=4F46E5&color=fff`;
+  const finalProfilePic =
+    profilePic ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&background=4F46E5&color=fff`;
 
   useEffect(() => {
     (async () => {
@@ -114,24 +137,38 @@ export default function StudentDashboard() {
         const userProfile = profile.data?.user || profile.data || {};
         const divInfo = userProfile.division || {};
 
+        // Sync fresh profile name & details into state & storage
+        if (userProfile.firstName || userProfile.name) {
+          const freshName = userProfile.name || `${userProfile.firstName || ""} ${userProfile.lastName || ""}`.trim();
+          setCurrentUser(userProfile);
+          sessionStorage.setItem("user", JSON.stringify(userProfile));
+          sessionStorage.setItem("name", freshName);
+        }
+
         const roll =
           userProfile.rollNumber ||
           userProfile.rollNo ||
+          sessionStorage.getItem("rollNumber") ||
           localStorage.getItem("rollNumber") ||
-          storedUser.rollNumber ||
+          currentUser.rollNumber ||
           "N/A";
 
         setDashboardData({
           attendance: percent,
           grade: latestGrade,
           department: divInfo.department?.name || userProfile.department?.name || "N/A",
-          semester: divInfo.semester?.semesterNumber ? `Semester ${divInfo.semester.semesterNumber}` : userProfile.semester?.semesterNumber ? `Semester ${userProfile.semester.semesterNumber}` : "N/A",
+          semester: divInfo.semester?.semesterNumber 
+            ? `Semester ${divInfo.semester.semesterNumber}` 
+            : userProfile.semester?.semesterNumber 
+            ? `Semester ${userProfile.semester.semesterNumber}` 
+            : "N/A",
           division: divInfo.name || userProfile.division?.name || "N/A",
           rollNumber: roll,
         });
 
-        if (userProfile.profilePic && !localStorage.getItem("profilePic")) {
+        if (userProfile.profilePic && !profilePic) {
           setProfilePic(userProfile.profilePic);
+          sessionStorage.setItem("profilePic", userProfile.profilePic);
           localStorage.setItem("profilePic", userProfile.profilePic);
         }
       } catch (err) {
@@ -177,7 +214,7 @@ export default function StudentDashboard() {
       <header className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-            Hello, <span className="text-blue-600 dark:text-blue-400">{studentName.split(" ")[0]}!</span>
+            Hello, <span className="text-blue-600 dark:text-blue-400">{studentFirstName}!</span>
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
             Here is your academic overview and status.
@@ -241,7 +278,7 @@ export default function StudentDashboard() {
                 <motion.div 
                   initial={{ width: 0 }} 
                   animate={{ width: `${dashboardData.attendance}%` }} 
-                  transition={{ duration: 0.8, ease: "easeOut" }}
+                  transition={{ duration: 0.8, ease: "easeOut" }} 
                   className="bg-emerald-500 h-full rounded-full" 
                 />
               </div>

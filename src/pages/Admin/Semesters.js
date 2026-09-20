@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import API from "../../services/api";
-import { CalendarDays, PlusCircle, Edit2, Trash2, BookOpen, GraduationCap, Loader2, X, AlertCircle } from "lucide-react";
+import { CalendarDays, PlusCircle, Edit2, Trash2, BookOpen, GraduationCap, Loader2, X, AlertCircle, Hash } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
-const INITIAL_FORM = { name: "", department: "" };
+// 🔹 Added semesterNumber to initial form state
+const INITIAL_FORM = { name: "", semesterNumber: "", department: "" };
 
 function Semesters() {
   const [semesters, setSemesters] = useState([]);
@@ -26,20 +27,34 @@ function Semesters() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.department) return toast.error("Fill all fields");
+    
+    // 🔹 Validate that both name and semesterNumber are filled
+    if (!form.name || form.semesterNumber === "") {
+      return toast.error("Semester Name and Number are required");
+    }
 
     try {
       setLoading(true);
+      
+      // 🔹 Construct safe payload for backend
+      const payload = {
+        name: form.name.trim(),
+        semesterNumber: Number(form.semesterNumber), // Cast to Number
+        department: form.department && form.department !== "" ? form.department : null, // Prevent CastError
+      };
+
       if (editId) {
-        await API.put(`/semesters/${editId}`, form);
+        await API.put(`/semesters/${editId}`, payload);
         toast.success("Semester Updated");
       } else {
-        await API.post("/semesters", form);
+        await API.post("/semesters", payload);
         toast.success("Semester Added");
       }
       handleCancel();
       fetchSemesters();
-    } catch { toast.error("Error saving semester"); } 
+    } catch (err) { 
+      toast.error(err.response?.data?.message || "Error saving semester"); 
+    } 
     finally { setLoading(false); }
   };
 
@@ -49,12 +64,18 @@ function Semesters() {
       await API.delete(`/semesters/${id}`);
       toast.success("Semester Deleted");
       fetchSemesters();
-    } catch { toast.error("Delete failed"); }
+    } catch (err) { 
+      toast.error(err.response?.data?.message || "Delete failed"); 
+    }
   };
 
   const handleEdit = (sem) => {
     setEditId(sem._id);
-    setForm({ name: sem.name, department: sem.department?._id || "" });
+    setForm({ 
+      name: sem.name, 
+      semesterNumber: sem.semesterNumber || "", 
+      department: sem.department?._id || "" 
+    });
   };
 
   const handleCancel = () => { setForm(INITIAL_FORM); setEditId(null); };
@@ -77,17 +98,28 @@ function Semesters() {
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border dark:border-slate-700 p-6 h-fit">
           <div className="flex items-center gap-2 mb-6"><BookOpen className="text-indigo-500" /><h2 className="text-xl font-bold">{editId ? "Update Semester" : "Add Semester"}</h2></div>
           <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Semester Name */}
             <div>
               <label className="text-sm font-semibold mb-2 block">Semester Name</label>
-              <input type="text" placeholder="Semester Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white placeholder:text-slate-400 rounded-xl px-4 py-3 outline-none" />
+              <input type="text" placeholder="e.g. Fall 2026" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white placeholder:text-slate-400 rounded-xl px-4 py-3 outline-none" />
             </div>
+
+            {/* 🔹 NEW: Semester Number */}
+            <div>
+              <label className="text-sm font-semibold mb-2 block">Semester Number</label>
+              <input type="number" placeholder="e.g. 1" min="1" max="10" value={form.semesterNumber} onChange={(e) => setForm({ ...form, semesterNumber: e.target.value })} className="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white placeholder:text-slate-400 rounded-xl px-4 py-3 outline-none" />
+            </div>
+
+            {/* Department */}
             <div>
               <label className="text-sm font-semibold mb-2 block">Department</label>
               <select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 text-black dark:text-white rounded-xl px-4 py-3 outline-none">
-                <option value="">Select Department</option>
+                <option value="">No Department (Global)</option>
                 {departments.map((dept) => <option key={dept._id} value={dept._id} className="bg-white dark:bg-slate-900">{dept.name}</option>)}
               </select>
             </div>
+
             <div className="flex gap-3 pt-2">
               {editId && <button type="button" onClick={handleCancel} className="p-3 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition"><X size={18} /></button>}
               <button type="submit" disabled={loading} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2">
@@ -110,7 +142,8 @@ function Semesters() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-slate-100 dark:bg-slate-700 text-black dark:text-white">
-                    {["#", "Semester", "Department", "Actions"].map((h, i) => <th key={h} className={`p-4 ${i === 3 ? "text-center" : "text-left"}`}>{h}</th>)}
+                    {/* 🔹 ADDED "Number" column to table headers */}
+                    {["#", "Name", "Number", "Department", "Actions"].map((h, i) => <th key={h} className={`p-4 ${i === 4 ? "text-center" : "text-left"}`}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -118,7 +151,20 @@ function Semesters() {
                     <tr key={sem._id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition">
                       <td className="p-4">{index + 1}</td>
                       <td className="p-4 font-semibold">{sem.name}</td>
-                      <td className="p-4"><div className="flex items-center gap-2"><GraduationCap size={16} className="text-indigo-500" />{sem.department?.name}</div></td>
+                      
+                      {/* 🔹 NEW: Display semester number */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-2 text-indigo-500 font-bold">
+                          <Hash size={16} /> {sem.semesterNumber}
+                        </div>
+                      </td>
+
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <GraduationCap size={16} className={sem.department ? "text-emerald-500" : "text-slate-400"} />
+                          {sem.department?.name || <span className="text-slate-400 italic">None</span>}
+                        </div>
+                      </td>
                       <td className="p-4">
                         <div className="flex justify-center gap-3">
                           <button onClick={() => handleEdit(sem)} className="p-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600"><Edit2 size={18} /></button>

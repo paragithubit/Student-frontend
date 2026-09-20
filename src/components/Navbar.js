@@ -40,10 +40,15 @@ const NAV_CONFIG = {
 };
 
 function Navbar() {
-  const role = localStorage.getItem("role");
+  // Read role from sessionStorage first to keep tabs completely isolated
+  const role =
+    sessionStorage.getItem("role") || localStorage.getItem("role");
+
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("theme") === "dark"
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -57,11 +62,14 @@ function Navbar() {
   }, [darkMode]);
 
   const handleLogout = () => {
-    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user");
     window.location.href = "/";
   };
 
-  const currentNavLinks = NAV_CONFIG[role] || [];
+  const currentNavLinks = (role && NAV_CONFIG[role.toLowerCase()]) || [];
 
   return (
     <>
@@ -70,12 +78,12 @@ function Navbar() {
         <div className="flex gap-6 lg:gap-10 items-center">
           <Link to={`/${role || ""}`} className="flex items-center gap-2.5 group">
             <div className="bg-indigo-600 p-2 rounded-xl shadow-indigo-500/20 shadow-lg group-hover:scale-105 transition-transform">
-              <div className="w-5 h-5 border-2 border-white rounded-sm" />
+              <div className="w-5 h-5 border-2 border-white rounded-xs" />
             </div>
             <h2 className="font-black text-xl tracking-tighter uppercase">EduCloud</h2>
           </Link>
 
-          {/* Desktop Navigation Links (Increased text size to text-base and bold for high visibility) */}
+          {/* Desktop Navigation Links */}
           <div className="hidden xl:flex gap-2.5 items-center">
             {currentNavLinks.map((link) => {
               const isActive = location.pathname === link.path;
@@ -156,7 +164,7 @@ function Navbar() {
           </button>
         </div>
 
-        {/* Scrollable Mobile Links (Larger text for mobile as well) */}
+        {/* Scrollable Mobile Links */}
         <div className="flex-1 py-5 space-y-2 overflow-y-auto">
           {currentNavLinks.map((link) => {
             const isActive = location.pathname === link.path;
