@@ -48,8 +48,27 @@ export default function Results() {
           API.get("/results"),
           API.get("/semesters"),
         ]);
-        setData({ students: stu.data, subjects: sub.data, results: res.data });
-        setSemesters(sem.data);
+
+        // 🔹 Natural numerical sorting for semesters (Semester 1, Semester 2, Semester 3...)
+        const sortedSemesters = [...(sem.data || [])].sort((a, b) => {
+          const numA = parseInt(String(a.name || "").replace(/\D/g, ""), 10);
+          const numB = parseInt(String(b.name || "").replace(/\D/g, ""), 10);
+
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+          }
+          return String(a.name || "").localeCompare(String(b.name || ""), undefined, { 
+            numeric: true, 
+            sensitivity: "base" 
+          });
+        });
+
+        setData({ 
+          students: stu.data || [], 
+          subjects: sub.data || [], 
+          results: res.data || [] 
+        });
+        setSemesters(sortedSemesters);
       } catch {
         toast.error("Failed to synchronize with matrix database");
       } finally {
@@ -100,7 +119,7 @@ export default function Results() {
       setForm(initialForm);
       setEditId(null);
       const res = await API.get("/results");
-      setData((prev) => ({ ...prev, results: res.data }));
+      setData((prev) => ({ ...prev, results: res.data || [] }));
     } catch (err) {
       toast.error(err.response?.data?.message || "Operation failed ❌", { id: loadingToast });
     }
@@ -123,7 +142,7 @@ export default function Results() {
   const downloadPDF = (r) => {
     const doc = new jsPDF();
     const subject = r.subjects?.[0];
-    const studentName = `${r.student?.firstName} ${r.student?.lastName}`;
+    const studentName = `${r.student?.firstName || ""} ${r.student?.lastName || ""}`.trim() || "Student";
     const status = subject?.marks >= 33 ? "PASS" : "FAIL";
 
     doc.setFontSize(22);
@@ -139,20 +158,20 @@ export default function Results() {
 
     doc.setTextColor(0);
     doc.text(`Student: ${studentName}`, 20, 65);
-    doc.text(`Semester: ${r.semester?.name}`, 20, 75);
-    doc.text(`Subject: ${subject?.subjectId?.name}`, 20, 85);
-    doc.text(`Marks Obtained: ${subject?.marks} / 100`, 20, 95);
+    doc.text(`Semester: ${r.semester?.name || "N/A"}`, 20, 75);
+    doc.text(`Subject: ${subject?.subjectId?.name || "N/A"}`, 20, 85);
+    doc.text(`Marks Obtained: ${subject?.marks || 0} / 100`, 20, 95);
 
     doc.setFontSize(16);
     doc.setTextColor(status === "PASS" ? 22 : 220, status === "PASS" ? 163 : 38, status === "PASS" ? 74 : 38);
     doc.text(`FINAL STATUS: ${status}`, 105, 120, { align: "center" });
 
-    doc.save(`Result_${studentName.replace(" ", "_")}.pdf`);
+    doc.save(`Result_${studentName.replace(/\s+/g, "_")}.pdf`);
     toast.success("PDF Generated Successfully");
   };
 
   const filtered = data.results.filter((r) =>
-    `${r.student?.firstName} ${r.student?.lastName}`.toLowerCase().includes(search.toLowerCase())
+    `${r.student?.firstName || ""} ${r.student?.lastName || ""}`.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) return (
@@ -211,6 +230,7 @@ export default function Results() {
                 onChange={(e) => handleForm("student", e.target.value)}
               />
 
+              {/* 🔹 SEMESTER DROPDOWN (Sorted sequentially 1, 2, 3...) */}
               <FormFieldSelect
                 label="Semester Cycle"
                 icon={GraduationCap}

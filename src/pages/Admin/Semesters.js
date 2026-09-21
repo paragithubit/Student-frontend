@@ -26,14 +26,29 @@ function Semesters() {
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchSemesters = async () => {
-    try { 
-      const res = await API.get("/semesters");
-      setSemesters(res.data); 
-    } catch { 
-      toast.error("Failed to fetch semesters"); 
-    }
-  };
+  // ✅ UPDATED CODE: Naturally sorts 1, 2, 3...
+const fetchSemesters = async () => {
+  try { 
+    const res = await API.get("/semesters");
+    
+    // Sort items naturally by extracting the number from the string
+    const sorted = [...res.data].sort((a, b) => {
+      const numA = parseInt(a.name.replace(/\D/g, ""), 10);
+      const numB = parseInt(b.name.replace(/\D/g, ""), 10);
+
+      // If both contain a number, sort numerically (1, 2, 3...)
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Fallback: standard alphabetical comparison
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    setSemesters(sorted); 
+  } catch { 
+    toast.error("Failed to fetch semesters"); 
+  }
+};
 
   const fetchDepartments = async () => {
     try { 

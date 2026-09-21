@@ -25,12 +25,38 @@ function Divisions() {
       const [divs, depts, sems, stus, tchs] = await Promise.all([
         API.get("/divisions"), API.get("/departments"), API.get("/semesters"), API.get("/users/students"), API.get("/users/teachers")
       ]);
-      setData({
-        divisions: divs.data, departments: depts.data, semesters: sems.data,
-        students: stus.data.filter(s => s._id), teachers: tchs.data.filter(t => t._id)
+
+      // 🔹 Sort semesters sequentially (Semester 1, Semester 2, Semester 3...)
+      const sortedSemesters = [...(sems.data || [])].sort((a, b) => {
+        const numA = parseInt(String(a.name || "").replace(/\D/g, ""), 10);
+        const numB = parseInt(String(b.name || "").replace(/\D/g, ""), 10);
+
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return String(a.name || "").localeCompare(String(b.name || ""), undefined, { 
+          numeric: true, 
+          sensitivity: "base" 
+        });
       });
-    } catch { toast.error("Network sync failed"); }
-    finally { setLoading(false); }
+
+      // 🔹 Sort divisions alphabetically / naturally
+      const sortedDivisions = [...(divs.data || [])].sort((a, b) => 
+        String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true })
+      );
+
+      setData({
+        divisions: sortedDivisions, 
+        departments: depts.data || [], 
+        semesters: sortedSemesters,
+        students: (stus.data || []).filter(s => s._id), 
+        teachers: (tchs.data || []).filter(t => t._id)
+      });
+    } catch { 
+      toast.error("Network sync failed"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => {
@@ -52,7 +78,9 @@ function Divisions() {
         students: data.students.filter(s => s.firstName && s.role === "student"),
         teachers: data.teachers.filter(t => t.firstName && t.role === "teacher")
       });
-    } else { setFiltered({ students: [], teachers: [] }); }
+    } else { 
+      setFiltered({ students: [], teachers: [] }); 
+    }
   }, [form.department, data.students, data.teachers]);
 
   const handleSubmit = async (e) => {
@@ -65,9 +93,13 @@ function Divisions() {
       const payload = { ...form, students: selected.students, teachers: selected.teachers };
       editId ? await API.put(`/divisions/${editId}`, payload) : await API.post("/divisions", payload);
       toast.success(`Division ${editId ? "Updated" : "Added"}`, { id: toastId });
-      handleReset(); fetchData();
-    } catch { toast.error("Error saving division", { id: toastId }); }
-    finally { setActionLoading(false); }
+      handleReset(); 
+      fetchData();
+    } catch { 
+      toast.error("Error saving division", { id: toastId }); 
+    } finally { 
+      setActionLoading(false); 
+    }
   };
 
   const handleDelete = async (id) => {
@@ -77,13 +109,22 @@ function Divisions() {
       await API.delete(`/divisions/${id}`);
       toast.success("Division Deleted", { id: toastId });
       fetchData();
-    } catch { toast.error("Delete failed", { id: toastId }); }
+    } catch { 
+      toast.error("Delete failed", { id: toastId }); 
+    }
   };
 
   const handleEdit = (div) => {
     setEditId(div._id);
-    setForm({ name: div.name, department: div.department?._id || "", semester: div.semester?._id || "" });
-    setSelected({ students: div.students?.map(s => s._id) || [], teachers: div.teachers?.map(t => t._id) || [] });
+    setForm({ 
+      name: div.name, 
+      department: div.department?._id || "", 
+      semester: div.semester?._id || "" 
+    });
+    setSelected({ 
+      students: div.students?.map(s => s._id) || [], 
+      teachers: div.teachers?.map(t => t._id) || [] 
+    });
     toast("Editing mode enabled", { icon: "📝" });
   };
 
@@ -156,6 +197,7 @@ function Divisions() {
               </div>
             </div>
 
+            {/* 🔹 SEMESTER DROPDOWN (Numbered sequentially & uses sem.name) */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Semester</label>
               <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4">
@@ -168,7 +210,7 @@ function Divisions() {
                   <option value="" className="bg-white dark:bg-slate-900 text-slate-400">Select Semester</option>
                   {data.semesters.map(sem => (
                     <option key={sem._id} value={sem._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      Semester {sem.semesterNumber}
+                      {sem.name}
                     </option>
                   ))}
                 </select>
@@ -235,7 +277,13 @@ function Divisions() {
               <table className="w-full border-collapse text-left">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-700 text-xs font-bold uppercase text-slate-400 bg-slate-50/50 dark:bg-slate-900/20">
-                    <th className="p-4">#</th><th className="p-4">Division</th><th className="p-4">Department</th><th className="p-4">Semester</th><th className="p-4">Students</th><th className="p-4">Teachers</th><th className="p-4 text-center">Actions</th>
+                    <th className="p-4">#</th>
+                    <th className="p-4">Division</th>
+                    <th className="p-4">Department</th>
+                    <th className="p-4">Semester</th>
+                    <th className="p-4">Students</th>
+                    <th className="p-4">Teachers</th>
+                    <th className="p-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -243,8 +291,13 @@ function Divisions() {
                     <tr key={div._id} className="border-b border-slate-100 dark:border-slate-700/60 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
                       <td className="p-4 text-sm text-slate-500">{index + 1}</td>
                       <td className="p-4 font-bold">{div.name}</td>
-                      <td className="p-4 text-sm">{div.department?.name}</td>
-                      <td className="p-4 text-sm">Semester {div.semester?.semesterNumber}</td>
+                      <td className="p-4 text-sm">{div.department?.name || <span className="text-slate-400 italic">None</span>}</td>
+                      
+                      {/* 🔹 SEMESTER COLUMN (Uses sem.name cleanly) */}
+                      <td className="p-4 text-sm font-medium">
+                        {div.semester?.name || <span className="text-slate-400 italic">None</span>}
+                      </td>
+
                       <td className="p-4 text-sm">{div.students?.length || 0}</td>
                       <td className="p-4 text-sm">{div.teachers?.length || 0}</td>
                       <td className="p-4">
