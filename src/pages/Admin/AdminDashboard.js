@@ -25,12 +25,37 @@ export default function AdminDashboard() {
   const [form, setForm] = useState(emptyForm);
   const [subForm, setSubForm] = useState(emptySub);
 
-  // Avatar file upload reference and state
-  const fileInputRef = useRef(null);
-  const [adminAvatar, setAdminAvatar] = useState(
-    () => localStorage.getItem("admin_avatar") || ""
-  );
+  // Retrieve current admin user
+  const getInitialUser = () => {
+    try {
+      const raw = sessionStorage.getItem("user") || localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  };
 
+  const [currentAdmin, setCurrentAdmin] = useState(getInitialUser);
+  const fileInputRef = useRef(null);
+  const [adminAvatar, setAdminAvatar] = useState("");
+
+  // 🔹 Load isolated admin avatar tied strictly to admin's ID
+  useEffect(() => {
+    const adminId = currentAdmin?._id || "admin";
+    const userKey = `admin_avatar_${adminId}`;
+    const stored = 
+      sessionStorage.getItem(userKey) || 
+      localStorage.getItem(userKey) || 
+      currentAdmin?.profilePic || 
+      currentAdmin?.avatar || 
+      "";
+
+    if (stored) {
+      setAdminAvatar(stored);
+    }
+  }, [currentAdmin?._id]);
+
+  // 🔹 Isolated profile upload handler
   const handleAvatarUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -39,14 +64,70 @@ export default function AdminDashboard() {
         return;
       }
 
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("Image size must be less than 2MB");
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const base64 = reader.result;
         setAdminAvatar(base64);
-        localStorage.setItem("admin_avatar", base64);
+
+        const adminId = currentAdmin?._id || "admin";
+        const userKey = `admin_avatar_${adminId}`;
+        
+        sessionStorage.setItem(userKey, base64);
+        localStorage.setItem(userKey, base64);
+
+        // Clean up legacy global keys
+        localStorage.removeItem("admin_avatar");
+        localStorage.removeItem("profilePic");
+
+        try {
+          const updated = { ...currentAdmin, profilePic: base64 };
+          setCurrentAdmin(updated);
+          sessionStorage.setItem("user", JSON.stringify(updated));
+          localStorage.setItem("user", JSON.stringify(updated));
+
+          // Sync to backend
+          await API.put("/users/profile", { profilePic: base64 }).catch(() => null);
+        } catch (err) {
+          console.error("Storage error:", err);
+        }
+
         toast.success("Profile picture updated! 📸");
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // 🔹 Remove Profile Picture & Revert to Initials Badge
+  const handleRemoveAvatar = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("Remove your profile picture and use initials?")) return;
+
+    const adminId = currentAdmin?._id || "admin";
+    const userKey = `admin_avatar_${adminId}`;
+
+    setAdminAvatar("");
+    sessionStorage.removeItem(userKey);
+    localStorage.removeItem(userKey);
+    localStorage.removeItem("admin_avatar");
+    localStorage.removeItem("profilePic");
+
+    try {
+      const updated = { ...currentAdmin, profilePic: "" };
+      setCurrentAdmin(updated);
+      sessionStorage.setItem("user", JSON.stringify(updated));
+      localStorage.setItem("user", JSON.stringify(updated));
+
+      // Clear in backend database
+      await API.put("/users/profile", { profilePic: "" });
+      toast.success("Profile picture removed! 🏷️");
+    } catch (err) {
+      console.error("Failed to remove avatar:", err);
+      toast.error("Could not sync with server");
     }
   };
 
@@ -57,6 +138,7 @@ export default function AdminDashboard() {
     } catch (err) {
       if (err.response?.status === 401) {
         localStorage.clear();
+        sessionStorage.clear();
         navigate("/");
         toast.error("Session expired. Please login again.");
       }
@@ -65,6 +147,23 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchUsers();
+
+    // Fetch fresh admin profile on mount
+    API.get("/auth/me")
+      .then((res) => {
+        const profile = res.data?.user || res.data;
+        if (profile?._id) {
+          setCurrentAdmin(profile);
+          sessionStorage.setItem("user", JSON.stringify(profile));
+          if (profile.profilePic) {
+            const userKey = `admin_avatar_${profile._id}`;
+            setAdminAvatar(profile.profilePic);
+            sessionStorage.setItem(userKey, profile.profilePic);
+            localStorage.setItem(userKey, profile.profilePic);
+          }
+        }
+      })
+      .catch(() => null);
   }, []);
 
   const handleInput = (setter) => (e) =>
@@ -149,6 +248,13 @@ export default function AdminDashboard() {
       .includes(searchTerm.toLowerCase())
   );
 
+  const adminName = [currentAdmin?.firstName, currentAdmin?.lastName].filter(Boolean).join(" ") || "Admin User";
+  
+  // Calculate initials (e.g., Pavan Laskari -> PL)
+  const firstLetter = currentAdmin?.firstName ? currentAdmin.firstName.trim()[0] : "A";
+  const secondLetter = currentAdmin?.lastName ? currentAdmin.lastName.trim()[0] : "D";
+  const initials = `${firstLetter}${secondLetter}`.toUpperCase();
+
   return (
     <div className="w-full space-y-6">
       <Toaster
@@ -173,14 +279,13 @@ export default function AdminDashboard() {
           />
         </div>
         
-        {/* Profile Card with WhatsApp-Style Local File Upload */}
+        {/* Profile Card with Isolated File Upload & Remove Option */}
         <div className="flex items-center justify-between sm:justify-end gap-3.5">
           <div className="text-left sm:text-right">
-            <p className="text-sm font-bold leading-tight">Admin User</p>
-            <p className="text-xs text-slate-500">Super Admin</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{adminName}</p>
+            <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">ADMIN PANEL</p>
           </div>
 
-          {/* Hidden File Input */}
           <input
             type="file"
             ref={fileInputRef}
@@ -189,28 +294,43 @@ export default function AdminDashboard() {
             className="hidden"
           />
 
-          {/* Clickable Avatar Box */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="relative group cursor-pointer h-10 w-10 rounded-xl overflow-hidden shadow-xs border border-indigo-200 dark:border-slate-700 bg-indigo-600 flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95"
-            title="Click to choose profile picture from device"
-          >
-            {adminAvatar ? (
-              <img
-                src={adminAvatar}
-                alt="Admin Avatar"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-white font-black text-sm tracking-wider select-none">
-                AD
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            {/* Clickable Avatar Box */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="relative group cursor-pointer h-11 w-11 rounded-2xl overflow-hidden shadow-md border-2 border-indigo-400/30 bg-[#4F46E5] flex items-center justify-center shrink-0 transition-transform hover:scale-105 active:scale-95"
+              title="Click to change profile picture"
+            >
+              {adminAvatar ? (
+                <img
+                  src={adminAvatar}
+                  alt="Admin Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                /* Blue Badge with Initials (Matches your image design) */
+                <span className="text-white font-extrabold text-base tracking-wider select-none">
+                  {initials}
+                </span>
+              )}
 
-            {/* Hover Camera Icon Overlay */}
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-              <FaCamera size={13} />
+              {/* Hover Camera Icon Overlay */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <FaCamera size={14} />
+              </div>
             </div>
+
+            {/* Quick Remove Button (Shown only when photo is active) */}
+            {adminAvatar && (
+              <button
+                type="button"
+                onClick={handleRemoveAvatar}
+                className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all text-xs"
+                title="Remove photo and use initials"
+              >
+                <FaTrashAlt size={12} />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -296,6 +416,7 @@ export default function AdminDashboard() {
               placeholder="Last Name"
               value={form.lastName}
               onChange={handleInput(setForm)}
+              required
               className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full"
             />
             <input
@@ -317,7 +438,6 @@ export default function AdminDashboard() {
               <option value="teacher" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Teacher</option>
             </select>
 
-            {/* Roll Number Input (Type text to allow alphanumeric formats) */}
             {form.role.toLowerCase() === "student" && (
               <input
                 name="rollNumber"

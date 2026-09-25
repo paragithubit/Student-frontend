@@ -7,7 +7,8 @@ import {
   FaBookOpen, 
   FaUniversity, 
   FaLayerGroup,
-  FaCamera 
+  FaCamera,
+  FaTrashAlt
 } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
@@ -72,19 +73,39 @@ export default function StudentDashboard() {
 
   const studentFirstName = currentUser?.firstName || studentName.split(" ")[0] || "Student";
 
+  // Compute initials (e.g., Pavan Laskari -> PL)
+  const initials = (() => {
+    const fn = currentUser?.firstName ? currentUser.firstName.trim()[0] : "";
+    const ln = currentUser?.lastName ? currentUser.lastName.trim()[0] : "";
+    if (fn || ln) return `${fn}${ln}`.toUpperCase();
+
+    const parts = studentName.split(" ").filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return (parts[0]?.[0] || "S").toUpperCase();
+  })();
+
+  // 🔹 Load isolated profile picture strictly for this specific user ID
   useEffect(() => {
-    const storedPic = 
-      sessionStorage.getItem("profilePic") || 
-      localStorage.getItem("profilePic") || 
-      currentUser?.profilePic || 
-      currentUser?.avatar || 
+    if (!currentUser?._id) return;
+
+    const userSpecificKey = `profilePic_${currentUser._id}`;
+    const userStoredPic =
+      sessionStorage.getItem(userSpecificKey) ||
+      localStorage.getItem(userSpecificKey) ||
+      currentUser?.profilePic ||
+      currentUser?.avatar ||
       currentUser?.photo;
 
-    if (storedPic) {
-      setProfilePic(storedPic);
+    if (userStoredPic) {
+      setProfilePic(userStoredPic);
+    } else {
+      setProfilePic("");
     }
-  }, [currentUser]);
+  }, [currentUser?._id]);
 
+  // 🔹 Handle local device image selection isolated to THIS user
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -95,30 +116,62 @@ export default function StudentDashboard() {
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const base64String = reader.result;
       setProfilePic(base64String);
 
-      sessionStorage.setItem("profilePic", base64String);
-      localStorage.setItem("profilePic", base64String);
+      // Save strictly with user-specific keys (Never generic "profilePic")
+      const userKey = currentUser?._id ? `profilePic_${currentUser._id}` : "profilePic";
+      sessionStorage.setItem(userKey, base64String);
+      localStorage.setItem(userKey, base64String);
+
+      // Clean up legacy global key if it exists
+      sessionStorage.removeItem("profilePic");
+      localStorage.removeItem("profilePic");
 
       try {
         const updated = { ...currentUser, profilePic: base64String };
         setCurrentUser(updated);
         sessionStorage.setItem("user", JSON.stringify(updated));
         localStorage.setItem("user", JSON.stringify(updated));
+
+        // Sync with backend API
+        await API.put("/users/profile", { profilePic: base64String }).catch(() => null);
       } catch (err) {
         console.error("Failed to update user object in storage", err);
       }
 
-      toast.success("Profile photo updated successfully!");
+      toast.success("Profile photo updated successfully! 📸");
     };
     reader.readAsDataURL(file);
   };
 
-  const finalProfilePic =
-    profilePic ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(studentName)}&background=4F46E5&color=fff`;
+  // 🔹 Remove Profile Picture & Revert to Initials Badge
+  const handleRemoveProfilePic = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("Remove profile picture and use initials?")) return;
+
+    const userKey = currentUser?._id ? `profilePic_${currentUser._id}` : "profilePic";
+    setProfilePic("");
+    sessionStorage.removeItem(userKey);
+    localStorage.removeItem(userKey);
+    sessionStorage.removeItem("profilePic");
+    localStorage.removeItem("profilePic");
+
+    try {
+      const updated = { ...currentUser, profilePic: "" };
+      setCurrentUser(updated);
+      sessionStorage.setItem("user", JSON.stringify(updated));
+      localStorage.setItem("user", JSON.stringify(updated));
+
+      // Clear in backend database
+      await API.put("/users/profile", { profilePic: "" }).catch(() => null);
+      toast.success("Profile picture removed! 🏷️");
+    } catch (err) {
+      console.error("Failed to remove profile pic", err);
+      toast.error("Failed to sync change with server");
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -157,19 +210,17 @@ export default function StudentDashboard() {
           attendance: percent,
           grade: latestGrade,
           department: divInfo.department?.name || userProfile.department?.name || "N/A",
-          semester: divInfo.semester?.semesterNumber 
-            ? `Semester ${divInfo.semester.semesterNumber}` 
-            : userProfile.semester?.semesterNumber 
-            ? `Semester ${userProfile.semester.semesterNumber}` 
-            : "N/A",
+          semester: divInfo.semester?.name || userProfile.semester?.name || "N/A",
           division: divInfo.name || userProfile.division?.name || "N/A",
           rollNumber: roll,
         });
 
-        if (userProfile.profilePic && !profilePic) {
+        // Use user-isolated key for fetched profile picture
+        if (userProfile._id && userProfile.profilePic) {
+          const userKey = `profilePic_${userProfile._id}`;
           setProfilePic(userProfile.profilePic);
-          sessionStorage.setItem("profilePic", userProfile.profilePic);
-          localStorage.setItem("profilePic", userProfile.profilePic);
+          sessionStorage.setItem(userKey, userProfile.profilePic);
+          localStorage.setItem(userKey, userProfile.profilePic);
         }
       } catch (err) {
         console.error("Failed to load student dashboard info", err);
@@ -237,19 +288,43 @@ export default function StudentDashboard() {
             className="hidden" 
           />
 
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="relative group cursor-pointer shrink-0"
-            title="Click to choose a photo from your device"
-          >
-            <img 
-              src={finalProfilePic} 
-              className="w-11 h-11 rounded-xl border-2 border-blue-500 object-cover shadow-xs group-hover:opacity-85 transition-opacity" 
-              alt="profile" 
-            />
-            <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <FaCamera size={14} className="text-white" />
+          <div className="flex items-center gap-2">
+            {/* Clickable Profile Picture / Initials Badge */}
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="relative group cursor-pointer h-11 w-11 rounded-2xl overflow-hidden shadow-md border-2 border-indigo-400/30 bg-[#4F46E5] flex items-center justify-center shrink-0 transition-transform hover:scale-105 active:scale-95"
+              title="Click to choose a photo from your device"
+            >
+              {profilePic ? (
+                <img 
+                  src={profilePic} 
+                  className="w-full h-full object-cover" 
+                  alt="profile" 
+                />
+              ) : (
+                /* Native Blue Initials Badge */
+                <span className="text-white font-extrabold text-base tracking-wider select-none">
+                  {initials}
+                </span>
+              )}
+
+              {/* Hover Camera Icon Overlay */}
+              <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <FaCamera size={14} className="text-white" />
+              </div>
             </div>
+
+            {/* Quick Remove Button (Shown only when photo is active) */}
+            {profilePic && (
+              <button
+                type="button"
+                onClick={handleRemoveProfilePic}
+                className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all text-xs"
+                title="Remove photo and use initials badge"
+              >
+                <FaTrashAlt size={12} />
+              </button>
+            )}
           </div>
         </div>
       </header>
